@@ -4,7 +4,7 @@ Bump tool tries to create the next semver version of your software by using the 
 ## Installation
 ```sh
 export GOSUMDB=off # Necessary as the repo owner is capitalized
-go install github.com/Devops-2022-Group-R/bump-tool 
+go install github.com/Devops-2022-Group-R/bump-tool@latest
 ```
 
 ## Usage
