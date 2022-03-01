@@ -174,6 +174,7 @@ func retrieveArgs() Args {
 	repo := flag.String("repo", "", "Repo")
 	owner := flag.String("owner", "", "Repo owner")
 	url := flag.String("url", "", "Pull request url")
+	commitMsg := flag.String("commitMsg", "", "Pull request url")
 	lg := flag.Bool("shouldLog", true, "Should log output")
 
 	flag.Parse()
@@ -186,21 +187,28 @@ func retrieveArgs() Args {
 	}
 	args.Token = *token
 
-	if *prNumber == -1 && *repo == "" && *owner == "" {
-		if *url == "" {
-			ErrorHandle(errors.New("no pr url provided. provide either a pr number, repo and owner or a pr url"))
-		} else {
-			ar, err := retrievePrInfoFromUrl(*url, args)
-			if err != nil {
-				ErrorHandle(err)
-			}
-
-			args = ar
+	if *url != "" {
+		ar, err := retrievePrInfoFromUrl(*url, args)
+		if err != nil {
+			ErrorHandle(err)
 		}
-	} else {
-		args.PrNumber = *prNumber
+
+		args = ar
+	} else if *repo != "" && *owner != "" && *commitMsg != "" {
+		prNumber, err := retrievePrNumberFromCommit(*commitMsg)
+		if err != nil {
+			ErrorHandle(err)
+		}
+
 		args.Repo = *repo
 		args.RepoOwner = *owner
+		args.PrNumber = prNumber
+	} else if *repo != "" && *owner != "" && *prNumber != -1 {
+		args.Repo = *repo
+		args.RepoOwner = *owner
+		args.PrNumber = *prNumber
+	} else {
+		ErrorHandle(errors.New("Provide either (pr number, repo and owner), (repo, owner and commitmsg) or pr url arguments provided"))
 	}
 
 	return args
@@ -208,14 +216,8 @@ func retrieveArgs() Args {
 
 func retrievePrInfoFromUrl(url string, args Args) (Args, error) {
 	var re = regexp.MustCompile(`(?m).*\/(?P<owner>.+)\/(?P<repo>.+)\/pull\/(?P<prNumber>\d+)`)
-	match := re.FindStringSubmatch(url)
 
-	paramsMap := make(map[string]string)
-	for i, name := range re.SubexpNames() {
-		if i > 0 && i <= len(match) {
-			paramsMap[name] = match[i]
-		}
-	}
+	paramsMap := readRegxToMap(re.FindStringSubmatch(url), re.SubexpNames())
 
 	if paramsMap["repo"] == "" {
 		return args, errors.New("no repo found")
@@ -237,6 +239,33 @@ func retrievePrInfoFromUrl(url string, args Args) (Args, error) {
 	args.RepoOwner = paramsMap["owner"]
 
 	return args, nil
+}
+
+func retrievePrNumberFromCommit(msg string) (int, error) {
+	var re = regexp.MustCompile(`(?m).*\#(?P<prNumber>\d+).*`)
+
+	paramsMap := readRegxToMap(re.FindStringSubmatch(msg), re.SubexpNames())
+
+	if paramsMap["prNumber"] == "" {
+		return -1, errors.New("no pr number found")
+	}
+
+	if num, err := strconv.Atoi(paramsMap["prNumber"]); err != nil {
+		return -1, err
+	} else {
+		return num, nil
+	}
+}
+
+func readRegxToMap(match []string, names []string) map[string]string {
+	paramsMap := make(map[string]string)
+	for i, name := range names {
+		if i > 0 && i <= len(match) {
+			paramsMap[name] = match[i]
+		}
+	}
+
+	return paramsMap
 }
 
 func ErrorHandle(err error) {
